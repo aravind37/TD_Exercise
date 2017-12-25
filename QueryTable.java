@@ -15,6 +15,8 @@ import com.google.common.io.ByteStreams;
 import com.google.common.io.Files;
 import com.treasuredata.client.ExponentialBackOff;
 import com.treasuredata.client.TDClient;
+import com.treasuredata.client.TDClientException;
+import com.treasuredata.client.TDClientHttpUnauthorizedException;
 import com.treasuredata.client.model.TDJob;
 import com.treasuredata.client.model.TDJob.Status;
 import com.treasuredata.client.model.TDJobRequest;
@@ -22,16 +24,41 @@ import com.treasuredata.client.model.TDJobSummary;
 import com.treasuredata.client.model.TDResultFormat;
 
 public class QueryTable {
-
-	static String format = "TABULAR";
-	static String columns = "*";
+	
+	//Declaring constants to be used
+	private static final String DEFAULT_OUTPUT_FORMAT="tabular";
+	private static final String DEFAULT_ENGINE_TYPE="presto";
+	private static final String DEFAULT_COLUMNS = "*";
+	private static final String ERR_MSG_AUTHORIZATION_EXCEPTION="We are unable to authenticate. Please ensure that the td.conf file has been set correctly";
+	private static final String ERR_MSG_CONN_EXCEPTION="There is an issue with establishing connection with Treasure Data, please verify if you have configuration right";
+	private static final String ERR_MSG_QUERY_ENGINE = "Sorry the query engine you are trying to use is not enabled for this account";
+	private static final String MSG_SUCCESS = "Your request has been completed successfully";
+	private static final String ERR_MSG_WRONG_COLUMNS="Sorry the columns that you have entered is not present in the table";
+	private static final String ERR_MSG_INVALID_DB= "Sorry the DB that your provided does not exist";
+	private static final String ERR_MSG_INVALID_TABLE ="Sorry the table the you have mentioned does not exist in the database";
+	private static final String ERR_MSG_INVALID_OPTIONS="Please provide two required arguments, the DB name and the Table name";
+	private static final String ERR_MSG_INVALID_FORMAT="Please provide Tabular or CSV as an option for Format";
+	private static final String ERR_MSG_INVALID_LIMIT="Enter only positive integers for limit";
+	private static final String ERR_MSG_INVALID_TIME="Enter only integers for Min/MAX Time";
+	private static final String ERR_MSG_INVLAID_ENGINE="Please provide Hive or presto as an option for the engine";
+	private static final String ERR_MSG_MIN_MAX_COMPARE = "Please ensure that Min is lesser than MAX";
+	
+	private static final int ERR_CODE_TD = -1;
+	private static final int ERR_CODE_USER = 1;
+	private static final int CODE_SUCCESS = 0;
+	
+	static String format = DEFAULT_OUTPUT_FORMAT;
+	static String columns = DEFAULT_COLUMNS;
 	static String limit = null;
 	static String minTime = null;
 	static String maxTime = null;
-	static String engine = "presto";
+	static String engine = DEFAULT_ENGINE_TYPE;
 	static String database = null;
 	static String table = null;
-	static TDClient client;
+	static TDClient client=null;
+	static String query = null;
+	
+
 
 	public static void main(String[] args) throws InterruptedException {
 		Options commandLineOptions = buildOptions();
@@ -43,50 +70,35 @@ public class QueryTable {
 		// configuration is invalid
 		try {
 			client = TDClient.newClient();
-		} catch (Exception ex) {
-			System.out.println(
-					"There is an issue with establishing connection with Treasure Data, please verify if you have configuration right");
+			// validate if the the DB name and table name are valid
+			validateDatabase(client);
+			validateTable(client);
+			validateColumns(client);
+		} 
+		catch(TDClientHttpUnauthorizedException TDex){
+			closeClient(client,ERR_MSG_AUTHORIZATION_EXCEPTION,ERR_CODE_TD );
 		}
-
-		// validate if the the DB name and table name are valid
-		validateDatabase(client);
-		validateTable(client);
-		validateColumns(client);
-
+		catch (Exception ex) {
+			closeClient(client, ERR_MSG_CONN_EXCEPTION, ERR_CODE_TD);
+		}
+				
 		// format the query that we will run based on the parameters provided in
 		// the command line
-		String query = formatQuery();
-
+		 query = formatQuery();
 		System.out.println("Going to run the query " + query);
-		TDJobRequest dbType = null;
-
-		// Decide to run Hive or Presto Query
-		if (engine.equalsIgnoreCase("Hive")) {
-			dbType = TDJobRequest.newHiveQuery(database, query);
-		} else {
-			dbType = TDJobRequest.newPrestoQuery(database, query);
-		}
-
+		//Decide if the query has to be run on Hive or presto engine
+		TDJobRequest dbType = setEngineType();
 		String jobId = null;
 		try {
 			jobId = client.submit(dbType);
-		} catch (Exception ex) {
+		} catch (TDClientException ex) {
 			// Presto queries are not enabled for trial account
-			System.out.println("Sorry Presto Queries are not enabled for this account");
-			System.exit(-1);
+			closeClient(client, ERR_MSG_QUERY_ENGINE, ERR_CODE_TD);
 		}
 
 		// Decide the format of report based on users selection criteria
-		TDResultFormat reportFormat;
-
-		if (format.equalsIgnoreCase("csv")) {
-			reportFormat = TDResultFormat.CSV;
-		} else {
-			reportFormat = TDResultFormat.TSV;
-		}
-
+		TDResultFormat reportFormat=setReportType();
 		TDJobSummary job = client.jobStatus(jobId);
-
 		// wait until the query is executed
 		ExponentialBackOff backOff = new ExponentialBackOff();
 		while (!job.getStatus().isFinished()) {
@@ -94,15 +106,11 @@ public class QueryTable {
 			Thread.sleep(backOff.nextWaitTimeMillis());
 			job = client.jobStatus(jobId);
 		}
-
 		// Read the detailed job information
 		TDJob jobInfo = client.jobInfo(jobId);
-
 		// get the jobStatus
 		Status status = job.getStatus();
-
 		// set the output format
-
 		if (status == job.getStatus().SUCCESS) {
 			if (format.equalsIgnoreCase("tabular")) {
 				printTabularOutput(jobId, reportFormat);
@@ -110,13 +118,34 @@ public class QueryTable {
 				saveToCSV(jobId, reportFormat);
 			}
 		} else {
-			System.out.println(jobInfo.getCmdOut());
-			// close the client connection after the query fails
-			client.close();
-			System.exit(-1);
+			closeClient(client, jobInfo.getCmdOut(), ERR_CODE_TD);
 		}
 
 	}
+	//method to determine the query engine type based on user input
+	private static TDJobRequest setEngineType()
+	{
+		TDJobRequest dbType;
+		if (engine.equalsIgnoreCase("Hive")) {
+			dbType = TDJobRequest.newHiveQuery(database, query);
+		} else {
+			dbType = TDJobRequest.newPrestoQuery(database, query);
+		}
+		return dbType;
+	}
+
+	//method to define the output format based on user input
+	private static TDResultFormat setReportType()
+	{
+		TDResultFormat reportFormat;
+		if (format.equalsIgnoreCase("csv")) {
+			reportFormat = TDResultFormat.CSV;
+		} else {
+			reportFormat = TDResultFormat.TSV;
+		}
+		return reportFormat;
+	}
+	
 
 	private static void printTabularOutput(String jobId, TDResultFormat resultFormat) {
 		client.jobResult(jobId, resultFormat, new Function<InputStream, Boolean>() {
@@ -134,13 +163,10 @@ public class QueryTable {
 						System.out.println("Sorry, the query did not return any result");
 
 					}
-					client.close();
-					System.exit(0);
-
+					closeClient(client, MSG_SUCCESS, CODE_SUCCESS);
+					
 				} catch (Exception e) {
-					System.out.println(e.getStackTrace());
-					client.close();
-					System.exit(-1);
+					closeClient(client, e.toString(), ERR_CODE_TD);
 				}
 
 				return true;
@@ -171,15 +197,11 @@ public class QueryTable {
 
 					}
 					// close the connection and exit
-					client.close();
-					System.exit(0);
+					closeClient(client, MSG_SUCCESS, CODE_SUCCESS);
 
 				} catch (IOException e) {
 					// Catch and print exception related to files
-					e.printStackTrace();
-					// close the connection after throwing the error message
-					client.close();
-					System.exit(-1);
+					closeClient(client, e.toString(), ERR_CODE_TD);
 				}
 
 				return true;
@@ -209,17 +231,9 @@ public class QueryTable {
 					hash_Columns.add(columns_name[i]);
 			}
 			for (int i = 0; i < columns_input.length; i++) {
-				if (hash_Columns.contains(columns_input[i]) && columns_input.length <= columns_name.length)
-					;
-				else {
-					System.out.println("Sorry the columns that you have entered is not present in the table");
-					System.out.print("The value(s) for the column(s) can contain the following value(s):");
-					for (String column : columns_name) {
-						System.out.print(column + ",");
-					}
-					client.close();
-					System.exit(1);
-					;
+				if (!hash_Columns.contains(columns_input[i]) && columns_input.length <= columns_name.length)
+					 {
+					closeClient(client, ERR_MSG_WRONG_COLUMNS, ERR_CODE_USER);
 				}
 			}
 		}
@@ -228,28 +242,15 @@ public class QueryTable {
 
 	// verify if the DB provided in the argument is valid
 	private static void validateDatabase(TDClient client) {
-		// System.out.println(client.showTable("test_db",
-		// "demo").getColumns().toArray().toString());
-
-		if (client.existsDatabase(database)) {
-			;
-		} else {
-			client.close();
-			System.out
-					.println("Please provide a valid Database name. The Database base " + database + " does not exist");
-			System.exit(-1);
+		if (!client.existsDatabase(database)) {
+			closeClient(client, ERR_MSG_INVALID_DB, ERR_CODE_TD);
 		}
 	}
 
 	// validate if table provided in argument is valid
 	private static void validateTable(TDClient client) {
-		if (client.existsTable(database, table)) {
-			;
-		} else {
-			client.close();
-			System.out.println("Please provide a valid table name. The table  " + table
-					+ " does not exist in the Database " + database);
-			System.exit(-1);
+		if (!client.existsTable(database, table)) {
+			closeClient(client, ERR_MSG_INVALID_TABLE, ERR_CODE_TD);
 		}
 	}
 
@@ -257,7 +258,7 @@ public class QueryTable {
 	private static Options buildOptions() {
 		Options option = new Options();
 		option.addOption("f", "format", true,
-				"Format of the output : enter either CSV or Tabular, ex: -f/--format csvr");
+				"Format of the output : enter either CSV or Tabular, ex: -f/--format csv");
 		option.addOption("c", "columns", true,
 				"Provide the list of the columns that you want to query, ex: -c/--columns 'age' ");
 		option.addOption("l", "limit", true, "Limit to output to few rows, ex -l/--limt 100");
@@ -307,8 +308,7 @@ public class QueryTable {
 			}
 			Object[] getDBTable = cmd.getArgList().toArray();
 			if (getDBTable.length < 2 || getDBTable.length > 2) {
-				System.out.println("Please provide two required arguments, the DB name and the Table name");
-				System.exit(1);
+				closeClient(null, ERR_MSG_INVALID_OPTIONS, ERR_CODE_USER);
 			}
 
 			// get the DB and Table names from the string
@@ -333,8 +333,7 @@ public class QueryTable {
 		if (checkFormat.equalsIgnoreCase("tabular") || checkFormat.equalsIgnoreCase("CSV")) {
 			format = checkFormat;
 		} else {
-			System.out.println("Please provide Tabular or CSV as an option for Format");
-			System.exit(1);
+			closeClient(null,ERR_MSG_INVALID_FORMAT,ERR_CODE_TD);
 		}
 	}
 
@@ -349,8 +348,7 @@ public class QueryTable {
 
 			limit = checkLimit;
 		} else {
-			System.out.println("Enter only positive integers for limit");
-			System.exit(1);
+			closeClient(null, ERR_MSG_INVALID_LIMIT, ERR_CODE_USER);
 		}
 	}
 
@@ -371,9 +369,7 @@ public class QueryTable {
 			}
 
 		} else {
-			System.out.println("Enter only integers for Min/MAX Time");
-
-			System.exit(1);
+				closeClient(null,ERR_MSG_INVALID_TIME, ERR_CODE_USER);
 		}
 
 	}
@@ -383,16 +379,14 @@ public class QueryTable {
 		if (checkEngine.equalsIgnoreCase("hive") || checkEngine.equalsIgnoreCase("presto")) {
 			engine = checkEngine;
 		} else {
-			System.out.println("Please provide Hive or presto as an option for the engine");
-			System.exit(1);
+				closeClient(null, ERR_MSG_INVLAID_ENGINE, ERR_CODE_USER);
 		}
 	}
 
 	private static void verifyTime() {
 		if (minTime != null && maxTime != null) {
 			if (Long.parseLong(minTime) > Long.parseLong(maxTime)) {
-				System.out.println("Please ensure that the minimum time is lesser than the maximum time");
-				System.exit(1);
+				closeClient(null, ERR_MSG_MIN_MAX_COMPARE, ERR_CODE_USER);
 			}
 		}
 	}
@@ -417,5 +411,14 @@ public class QueryTable {
 			query = query + " where TD_TIME_RANGE(time," + minTime + "," + maxTime + ")";
 		}
 		return query;
+	}
+	private static void closeClient(TDClient client, String error_message, int exit_code)
+	{
+		if(client != null)
+		{
+			client.close();
+		}
+		System.out.println(error_message);
+		System.exit(exit_code);
 	}
 }
