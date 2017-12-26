@@ -1,6 +1,7 @@
 import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
+import java.time.LocalTime;
 import java.util.HashSet;
 
 import org.apache.commons.cli.CommandLine;
@@ -26,6 +27,7 @@ import com.treasuredata.client.model.TDResultFormat;
 public class QueryTable {
 	
 	//Declaring constants to be used
+	
 	private static final String DEFAULT_OUTPUT_FORMAT="tabular";
 	private static final String DEFAULT_ENGINE_TYPE="presto";
 	private static final String DEFAULT_COLUMNS = "*";
@@ -122,7 +124,10 @@ public class QueryTable {
 		}
 
 	}
-	//method to determine the query engine type based on user input
+	/**
+	 * Method to set the query engine type
+	 * @return - returns EngineType
+	 */
 	private static TDJobRequest setEngineType()
 	{
 		TDJobRequest dbType;
@@ -134,7 +139,10 @@ public class QueryTable {
 		return dbType;
 	}
 
-	//method to define the output format based on user input
+	/**
+	 * Method to set the report type, options can be CSV or tabular
+	 * @return - Returns TDResultFormat object with the appropriate return type
+	 */
 	private static TDResultFormat setReportType()
 	{
 		TDResultFormat reportFormat;
@@ -146,7 +154,11 @@ public class QueryTable {
 		return reportFormat;
 	}
 	
-
+	/**
+	 * Function to print the query in tabluar format
+	 * @param jobId - The Job Id of the query that is being executed
+	 * @param resultFormat - The output format of the result that user has specificed
+	 */
 	private static void printTabularOutput(String jobId, TDResultFormat resultFormat) {
 		client.jobResult(jobId, resultFormat, new Function<InputStream, Boolean>() {
 
@@ -174,7 +186,11 @@ public class QueryTable {
 			}
 		});
 	}
-
+	/**
+	 * Method to save the output to a csv file
+	 * @param jobId - The Job Id of the query that is being executed
+	 * @param resultFormat - Output format specified by the user
+	 */
 	private static void saveToCSV(String jobId, TDResultFormat resultFormat) {
 		client.jobResult(jobId, resultFormat, new Function<InputStream, Boolean>() {
 			@Override
@@ -184,7 +200,7 @@ public class QueryTable {
 					if (buffer.length > 0) {
 						// Create a new file in the directory where the function
 						// is being executed
-						File targetFile = new File("Query_Result.csv");
+						File targetFile = new File("Query_Result_"+LocalTime.now()+".csv");
 
 						// Print the location of the file where the CSV will be
 						// saved
@@ -210,7 +226,10 @@ public class QueryTable {
 		});
 
 	}
-
+/**
+ * Method to validate if the columns provided are valid
+ * @param client - Takes TDClient as input
+ */
 	private static void validateColumns(TDClient client) {
 		if (columns != "*") {
 			Object[] columns_table = client.showTable("test_db", "demo").getColumns().toArray();
@@ -240,21 +259,31 @@ public class QueryTable {
 
 	}
 
-	// verify if the DB provided in the argument is valid
+	
+	/**
+	 * Method to validate if the Database provided is valid
+	 * @param client - Takes TDClient as input
+	 */
 	private static void validateDatabase(TDClient client) {
 		if (!client.existsDatabase(database)) {
 			closeClient(client, ERR_MSG_INVALID_DB, ERR_CODE_TD);
 		}
 	}
 
-	// validate if table provided in argument is valid
+	/**
+	 * Method to validate if the table provided is valid
+	 * @param client - Takes TDClient as input
+	 */
 	private static void validateTable(TDClient client) {
 		if (!client.existsTable(database, table)) {
 			closeClient(client, ERR_MSG_INVALID_TABLE, ERR_CODE_TD);
 		}
 	}
 
-	// Define command line options
+	/**
+	 * Method to build the command line options
+	 * @return
+	 */
 	private static Options buildOptions() {
 		Options option = new Options();
 		option.addOption("f", "format", true,
@@ -270,6 +299,11 @@ public class QueryTable {
 		return option;
 
 	}
+	/**
+	 * Method to set program options
+	 * @param options - This is the command line parameters allowed
+	 * @param args - The command line arguments provided
+	 */
 
 	static void setOptions(Options options, String args[]) {
 		CommandLineParser parser = new DefaultParser();
@@ -328,6 +362,11 @@ public class QueryTable {
 
 	}
 
+	/**
+	 * Set the output format
+	 * @param cmd - Get the command line argument as input
+	 */
+			
 	private static void setFormatType(CommandLine cmd) {
 		String checkFormat = cmd.getOptionValue('f').toString();
 		if (checkFormat.equalsIgnoreCase("tabular") || checkFormat.equalsIgnoreCase("CSV")) {
@@ -337,10 +376,18 @@ public class QueryTable {
 		}
 	}
 
+	/**
+	 * Set the columns that the query should execute
+	 * @param cmd - Get the command line argument as input
+	 */
 	private static void setColumns(CommandLine cmd) {
 		String checkColumns = cmd.getOptionValue('c').toString();
 		columns = checkColumns;
 	}
+	/**
+	 * Limit the number of rows
+	 * @param cmd - Get the command line argument as input
+	 */
 
 	private static void setLimit(CommandLine cmd) {
 		String checkLimit = cmd.getOptionValue('l').toString();
@@ -352,7 +399,11 @@ public class QueryTable {
 		}
 	}
 
-	// Set min or MAX value
+	/**
+	 * Set the Min and MAX value for the time
+	 * @param cmd - Provide the values entered
+	 * @param decide - Set Min or Max based on the decide value
+	 */
 	private static void setTime(CommandLine cmd, int decide) {
 		String setTime;
 		if (decide == 0) {
@@ -374,6 +425,10 @@ public class QueryTable {
 
 	}
 
+	/**
+	 * Set the query engine type
+	 * @param cmd - Takes command line as the argument
+	 */
 	private static void setEngine(CommandLine cmd) {
 		String checkEngine = cmd.getOptionValue('e').toString();
 		if (checkEngine.equalsIgnoreCase("hive") || checkEngine.equalsIgnoreCase("presto")) {
@@ -383,6 +438,9 @@ public class QueryTable {
 		}
 	}
 
+	/**
+	 * Verify if Min is less than Max 
+	 */
 	private static void verifyTime() {
 		if (minTime != null && maxTime != null) {
 			if (Long.parseLong(minTime) > Long.parseLong(maxTime)) {
@@ -390,7 +448,10 @@ public class QueryTable {
 			}
 		}
 	}
-
+/**
+ * Format the query based on Limit
+ * @return
+ */
 	private static String formatQuery() {
 		String query = "select " + columns + " from " + table;
 		query = setTimeRange(query);
@@ -401,6 +462,11 @@ public class QueryTable {
 		return query;
 	}
 
+	/**
+	 * Update the query if Min and/or Max are provided
+	 * @param query - the query string
+	 * @return
+	 */
 	private static String setTimeRange(String query) {
 		if (minTime != null && maxTime == null) {
 			query = query + " where TD_TIME_RANGE(time," + minTime + ", null)";
@@ -412,13 +478,20 @@ public class QueryTable {
 		}
 		return query;
 	}
-	private static void closeClient(TDClient client, String error_message, int exit_code)
+	
+	/**
+	 * Method to handle the closing of connection to TD client and exiting with proper error code
+	 * @param client - This is the TD Client
+	 * @param message -Message to be displayed
+	 * @param exit_code - The code with which the program has to exit. Exit code is 1 for user errors, -1 when the issue on TD Client side and 0 when successfull
+	 */
+	private static void closeClient(TDClient client, String message, int exit_code)
 	{
 		if(client != null)
 		{
 			client.close();
 		}
-		System.out.println(error_message);
+		System.out.println(message);
 		System.exit(exit_code);
 	}
 }
