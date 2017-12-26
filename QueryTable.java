@@ -1,7 +1,6 @@
 import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
-import java.time.LocalTime;
 import java.util.HashSet;
 
 import org.apache.commons.cli.CommandLine;
@@ -25,30 +24,30 @@ import com.treasuredata.client.model.TDJobSummary;
 import com.treasuredata.client.model.TDResultFormat;
 
 public class QueryTable {
-	
-	//Declaring constants to be used
-	
-	private static final String DEFAULT_OUTPUT_FORMAT="tabular";
-	private static final String DEFAULT_ENGINE_TYPE="presto";
+
+	// Declaring constants to be used
+
+	private static final String DEFAULT_OUTPUT_FORMAT = "tabular";
+	private static final String DEFAULT_ENGINE_TYPE = "presto";
 	private static final String DEFAULT_COLUMNS = "*";
-	private static final String ERR_MSG_AUTHORIZATION_EXCEPTION="We are unable to authenticate. Please ensure that the td.conf file has been set correctly";
-	private static final String ERR_MSG_CONN_EXCEPTION="There is an issue with establishing connection with Treasure Data, please verify if you have configuration right";
+	private static final String ERR_MSG_AUTHORIZATION_EXCEPTION = "We are unable to authenticate. Please ensure that the td.conf file has been set correctly";
+	private static final String ERR_MSG_CONN_EXCEPTION = "There is an issue with establishing connection with Treasure Data, please verify if you have configuration right";
 	private static final String ERR_MSG_QUERY_ENGINE = "Sorry the query engine you are trying to use is not enabled for this account";
 	private static final String MSG_SUCCESS = "Your request has been completed successfully";
-	private static final String ERR_MSG_WRONG_COLUMNS="Sorry the columns that you have entered is not present in the table";
-	private static final String ERR_MSG_INVALID_DB= "Sorry the DB that your provided does not exist";
-	private static final String ERR_MSG_INVALID_TABLE ="Sorry the table the you have mentioned does not exist in the database";
-	private static final String ERR_MSG_INVALID_OPTIONS="Please provide two required arguments, the DB name and the Table name";
-	private static final String ERR_MSG_INVALID_FORMAT="Please provide Tabular or CSV as an option for Format";
-	private static final String ERR_MSG_INVALID_LIMIT="Enter only positive integers for limit";
-	private static final String ERR_MSG_INVALID_TIME="Enter only integers for Min/MAX Time";
-	private static final String ERR_MSG_INVLAID_ENGINE="Please provide Hive or presto as an option for the engine";
+	private static final String ERR_MSG_WRONG_COLUMNS = "Sorry the columns that you have entered is not present in the table";
+	private static final String ERR_MSG_INVALID_DB = "Sorry the DB that your provided does not exist";
+	private static final String ERR_MSG_INVALID_TABLE = "Sorry the table the you have mentioned does not exist in the database";
+	private static final String ERR_MSG_INVALID_OPTIONS = "Please provide two required arguments, the DB name and the Table name";
+	private static final String ERR_MSG_INVALID_FORMAT = "Please provide Tabular or CSV as an option for Format";
+	private static final String ERR_MSG_INVALID_LIMIT = "Enter only positive integers for limit";
+	private static final String ERR_MSG_INVALID_TIME = "Enter only integers for Min/MAX Time";
+	private static final String ERR_MSG_INVLAID_ENGINE = "Please provide Hive or presto as an option for the engine";
 	private static final String ERR_MSG_MIN_MAX_COMPARE = "Please ensure that Min is lesser than MAX";
-	
+
 	private static final int ERR_CODE_TD = -1;
 	private static final int ERR_CODE_USER = 1;
 	private static final int CODE_SUCCESS = 0;
-	
+
 	static String format = DEFAULT_OUTPUT_FORMAT;
 	static String columns = DEFAULT_COLUMNS;
 	static String limit = null;
@@ -57,10 +56,8 @@ public class QueryTable {
 	static String engine = DEFAULT_ENGINE_TYPE;
 	static String database = null;
 	static String table = null;
-	static TDClient client=null;
+	static TDClient client = null;
 	static String query = null;
-	
-
 
 	public static void main(String[] args) throws InterruptedException {
 		Options commandLineOptions = buildOptions();
@@ -76,19 +73,17 @@ public class QueryTable {
 			validateDatabase(client);
 			validateTable(client);
 			validateColumns(client);
-		} 
-		catch(TDClientHttpUnauthorizedException TDex){
-			closeClient(client,ERR_MSG_AUTHORIZATION_EXCEPTION,ERR_CODE_TD );
-		}
-		catch (Exception ex) {
+		} catch (TDClientHttpUnauthorizedException TDex) {
+			closeClient(client, ERR_MSG_AUTHORIZATION_EXCEPTION, ERR_CODE_TD);
+		} catch (Exception ex) {
 			closeClient(client, ERR_MSG_CONN_EXCEPTION, ERR_CODE_TD);
 		}
-				
+
 		// format the query that we will run based on the parameters provided in
 		// the command line
-		 query = formatQuery();
+		query = formatQuery();
 		System.out.println("Going to run the query " + query);
-		//Decide if the query has to be run on Hive or presto engine
+		// Decide if the query has to be run on Hive or presto engine
 		TDJobRequest dbType = setEngineType();
 		String jobId = null;
 		try {
@@ -99,7 +94,7 @@ public class QueryTable {
 		}
 
 		// Decide the format of report based on users selection criteria
-		TDResultFormat reportFormat=setReportType();
+		TDResultFormat reportFormat = setReportType();
 		TDJobSummary job = client.jobStatus(jobId);
 		// wait until the query is executed
 		ExponentialBackOff backOff = new ExponentialBackOff();
@@ -124,12 +119,13 @@ public class QueryTable {
 		}
 
 	}
+
 	/**
 	 * Method to set the query engine type
+	 * 
 	 * @return - returns EngineType
 	 */
-	private static TDJobRequest setEngineType()
-	{
+	private static TDJobRequest setEngineType() {
 		TDJobRequest dbType;
 		if (engine.equalsIgnoreCase("Hive")) {
 			dbType = TDJobRequest.newHiveQuery(database, query);
@@ -141,10 +137,10 @@ public class QueryTable {
 
 	/**
 	 * Method to set the report type, options can be CSV or tabular
+	 * 
 	 * @return - Returns TDResultFormat object with the appropriate return type
 	 */
-	private static TDResultFormat setReportType()
-	{
+	private static TDResultFormat setReportType() {
 		TDResultFormat reportFormat;
 		if (format.equalsIgnoreCase("csv")) {
 			reportFormat = TDResultFormat.CSV;
@@ -153,11 +149,14 @@ public class QueryTable {
 		}
 		return reportFormat;
 	}
-	
+
 	/**
 	 * Function to print the query in tabluar format
-	 * @param jobId - The Job Id of the query that is being executed
-	 * @param resultFormat - The output format of the result that user has specificed
+	 * 
+	 * @param jobId
+	 *            - The Job Id of the query that is being executed
+	 * @param resultFormat
+	 *            - The output format of the result that user has specificed
 	 */
 	private static void printTabularOutput(String jobId, TDResultFormat resultFormat) {
 		client.jobResult(jobId, resultFormat, new Function<InputStream, Boolean>() {
@@ -176,7 +175,7 @@ public class QueryTable {
 
 					}
 					closeClient(client, MSG_SUCCESS, CODE_SUCCESS);
-					
+
 				} catch (Exception e) {
 					closeClient(client, e.toString(), ERR_CODE_TD);
 				}
@@ -186,10 +185,14 @@ public class QueryTable {
 			}
 		});
 	}
+
 	/**
 	 * Method to save the output to a csv file
-	 * @param jobId - The Job Id of the query that is being executed
-	 * @param resultFormat - Output format specified by the user
+	 * 
+	 * @param jobId
+	 *            - The Job Id of the query that is being executed
+	 * @param resultFormat
+	 *            - Output format specified by the user
 	 */
 	private static void saveToCSV(String jobId, TDResultFormat resultFormat) {
 		client.jobResult(jobId, resultFormat, new Function<InputStream, Boolean>() {
@@ -200,7 +203,8 @@ public class QueryTable {
 					if (buffer.length > 0) {
 						// Create a new file in the directory where the function
 						// is being executed
-						File targetFile = new File("Query_Result_"+LocalTime.now()+".csv");
+						String TargetFileName = "Query_Result_" + System.currentTimeMillis() + ".csv";
+						File targetFile = new File(TargetFileName);
 
 						// Print the location of the file where the CSV will be
 						// saved
@@ -226,10 +230,13 @@ public class QueryTable {
 		});
 
 	}
-/**
- * Method to validate if the columns provided are valid
- * @param client - Takes TDClient as input
- */
+
+	/**
+	 * Method to validate if the columns provided are valid
+	 * 
+	 * @param client
+	 *            - Takes TDClient as input
+	 */
 	private static void validateColumns(TDClient client) {
 		if (columns != "*") {
 			Object[] columns_table = client.showTable("test_db", "demo").getColumns().toArray();
@@ -250,8 +257,7 @@ public class QueryTable {
 					hash_Columns.add(columns_name[i]);
 			}
 			for (int i = 0; i < columns_input.length; i++) {
-				if (!hash_Columns.contains(columns_input[i]) && columns_input.length <= columns_name.length)
-					 {
+				if (!hash_Columns.contains(columns_input[i]) && columns_input.length <= columns_name.length) {
 					closeClient(client, ERR_MSG_WRONG_COLUMNS, ERR_CODE_USER);
 				}
 			}
@@ -259,10 +265,11 @@ public class QueryTable {
 
 	}
 
-	
 	/**
 	 * Method to validate if the Database provided is valid
-	 * @param client - Takes TDClient as input
+	 * 
+	 * @param client
+	 *            - Takes TDClient as input
 	 */
 	private static void validateDatabase(TDClient client) {
 		if (!client.existsDatabase(database)) {
@@ -272,7 +279,9 @@ public class QueryTable {
 
 	/**
 	 * Method to validate if the table provided is valid
-	 * @param client - Takes TDClient as input
+	 * 
+	 * @param client
+	 *            - Takes TDClient as input
 	 */
 	private static void validateTable(TDClient client) {
 		if (!client.existsTable(database, table)) {
@@ -282,6 +291,7 @@ public class QueryTable {
 
 	/**
 	 * Method to build the command line options
+	 * 
 	 * @return
 	 */
 	private static Options buildOptions() {
@@ -299,10 +309,14 @@ public class QueryTable {
 		return option;
 
 	}
+
 	/**
 	 * Method to set program options
-	 * @param options - This is the command line parameters allowed
-	 * @param args - The command line arguments provided
+	 * 
+	 * @param options
+	 *            - This is the command line parameters allowed
+	 * @param args
+	 *            - The command line arguments provided
 	 */
 
 	static void setOptions(Options options, String args[]) {
@@ -312,8 +326,6 @@ public class QueryTable {
 
 		try {
 			cmd = parser.parse(options, args);
-			//
-			// System.out.println("The output value is " +checkFormat);
 			if (cmd.getOptionValue('f') != null) {
 				setFormatType(cmd);
 
@@ -364,29 +376,36 @@ public class QueryTable {
 
 	/**
 	 * Set the output format
-	 * @param cmd - Get the command line argument as input
+	 * 
+	 * @param cmd
+	 *            - Get the command line argument as input
 	 */
-			
+
 	private static void setFormatType(CommandLine cmd) {
 		String checkFormat = cmd.getOptionValue('f').toString();
 		if (checkFormat.equalsIgnoreCase("tabular") || checkFormat.equalsIgnoreCase("CSV")) {
 			format = checkFormat;
 		} else {
-			closeClient(null,ERR_MSG_INVALID_FORMAT,ERR_CODE_TD);
+			closeClient(null, ERR_MSG_INVALID_FORMAT, ERR_CODE_TD);
 		}
 	}
 
 	/**
 	 * Set the columns that the query should execute
-	 * @param cmd - Get the command line argument as input
+	 * 
+	 * @param cmd
+	 *            - Get the command line argument as input
 	 */
 	private static void setColumns(CommandLine cmd) {
 		String checkColumns = cmd.getOptionValue('c').toString();
 		columns = checkColumns;
 	}
+
 	/**
 	 * Limit the number of rows
-	 * @param cmd - Get the command line argument as input
+	 * 
+	 * @param cmd
+	 *            - Get the command line argument as input
 	 */
 
 	private static void setLimit(CommandLine cmd) {
@@ -401,8 +420,11 @@ public class QueryTable {
 
 	/**
 	 * Set the Min and MAX value for the time
-	 * @param cmd - Provide the values entered
-	 * @param decide - Set Min or Max based on the decide value
+	 * 
+	 * @param cmd
+	 *            - Provide the values entered
+	 * @param decide
+	 *            - Set Min or Max based on the decide value
 	 */
 	private static void setTime(CommandLine cmd, int decide) {
 		String setTime;
@@ -420,26 +442,28 @@ public class QueryTable {
 			}
 
 		} else {
-				closeClient(null,ERR_MSG_INVALID_TIME, ERR_CODE_USER);
+			closeClient(null, ERR_MSG_INVALID_TIME, ERR_CODE_USER);
 		}
 
 	}
 
 	/**
 	 * Set the query engine type
-	 * @param cmd - Takes command line as the argument
+	 * 
+	 * @param cmd
+	 *            - Takes command line as the argument
 	 */
 	private static void setEngine(CommandLine cmd) {
 		String checkEngine = cmd.getOptionValue('e').toString();
 		if (checkEngine.equalsIgnoreCase("hive") || checkEngine.equalsIgnoreCase("presto")) {
 			engine = checkEngine;
 		} else {
-				closeClient(null, ERR_MSG_INVLAID_ENGINE, ERR_CODE_USER);
+			closeClient(null, ERR_MSG_INVLAID_ENGINE, ERR_CODE_USER);
 		}
 	}
 
 	/**
-	 * Verify if Min is less than Max 
+	 * Verify if Min is less than Max
 	 */
 	private static void verifyTime() {
 		if (minTime != null && maxTime != null) {
@@ -448,10 +472,12 @@ public class QueryTable {
 			}
 		}
 	}
-/**
- * Format the query based on Limit
- * @return
- */
+
+	/**
+	 * Format the query based on Limit
+	 * 
+	 * @return
+	 */
 	private static String formatQuery() {
 		String query = "select " + columns + " from " + table;
 		query = setTimeRange(query);
@@ -464,7 +490,9 @@ public class QueryTable {
 
 	/**
 	 * Update the query if Min and/or Max are provided
-	 * @param query - the query string
+	 * 
+	 * @param query
+	 *            - the query string
 	 * @return
 	 */
 	private static String setTimeRange(String query) {
@@ -478,17 +506,22 @@ public class QueryTable {
 		}
 		return query;
 	}
-	
+
 	/**
-	 * Method to handle the closing of connection to TD client and exiting with proper error code
-	 * @param client - This is the TD Client
-	 * @param message -Message to be displayed
-	 * @param exit_code - The code with which the program has to exit. Exit code is 1 for user errors, -1 when the issue on TD Client side and 0 when successfull
+	 * Method to handle the closing of connection to TD client and exiting with
+	 * proper error code
+	 * 
+	 * @param client
+	 *            - This is the TD Client
+	 * @param message
+	 *            -Message to be displayed
+	 * @param exit_code
+	 *            - The code with which the program has to exit. Exit code is 1
+	 *            for user errors, -1 when the issue on TD Client side and 0
+	 *            when successfull
 	 */
-	private static void closeClient(TDClient client, String message, int exit_code)
-	{
-		if(client != null)
-		{
+	private static void closeClient(TDClient client, String message, int exit_code) {
+		if (client != null) {
 			client.close();
 		}
 		System.out.println(message);

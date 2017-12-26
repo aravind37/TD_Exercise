@@ -2,7 +2,7 @@
 <classpath>
 	<classpathentry kind="src" path=""/>
 	<classpathentry kind="con" path="org.eclipse.jdt.launching.JRE_CONTAINER"/>
-	<classpathentry kind="lib" path="C:/Users/amanicka/Desktop/TD_Exercise/commons-cli-1.4-bin/commons-cli-1.4/commons-cli-1.4.jar"/>
-	<classpathentry kind="lib" path="C:/Users/amanicka/Desktop/TD_Exercise/td-client-0.8.0-shade.jar"/>
+	<classpathentry kind="lib" path="lib/commons-cli-1.4.jar"/>
+	<classpathentry kind="lib" path="lib/td-client-0.8.0-shade.jar"/>
 	<classpathentry kind="output" path=""/>
 </classpath>
